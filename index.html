@@ -151,6 +151,7 @@ background:#2a2a2a;
 border-radius:8px;
 padding:10px;
 margin-bottom:8px;
+cursor:pointer;
 }
 
 .person:hover{
@@ -179,6 +180,11 @@ color:orange;
 
 .count2{
 color:red;
+}
+
+.waitingCount{
+font-size:14px;
+opacity:0.8;
 }
 
 .deleted{
@@ -322,8 +328,10 @@ joinList.forEach(player=>{
     `;
 
     div.onclick = ()=>{
-        if(mode === "red"){
-            removePlayer(player.id);
+        if(mode === "blue"){
+            moveToWaiting(player.id);
+        } else if(mode === "red"){
+            removePlayer(player.id, "join");
         }
     };
 
@@ -336,11 +344,20 @@ waiting.innerHTML = "";
 waitingList.forEach(player=>{
     const div = document.createElement("div");
     div.className = "person";
-    div.textContent = player.name;
+    div.innerHTML = `
+    <div class="${countClass(player.count)}">
+        ${player.name}
+    </div>
+    <div class="waitingCount">
+        対戦数: ${player.count}
+    </div>
+    `;
 
     div.onclick = ()=>{
         if(mode === "blue"){
             moveToJoin(player.id);
+        } else if(mode === "red"){
+            removePlayer(player.id, "waiting");
         }
     };
 
@@ -353,7 +370,14 @@ deleted.innerHTML = "";
 deletedList.forEach(player=>{
     const div = document.createElement("div");
     div.className = "person";
-    div.textContent = player.name;
+    div.innerHTML = `
+    <div class="${countClass(player.count)}">
+        ${player.name}
+    </div>
+    <div class="waitingCount">
+        対戦数: ${player.count}
+    </div>
+    `;
 
     div.onclick = ()=>{
         if(mode === "orange"){
@@ -380,16 +404,27 @@ waitingList.splice(index,1);
 render();
 }
 
-function removePlayer(id){
+function moveToWaiting(id){
 const index = joinList.findIndex(x=>x.id===id);
 if(index===-1){
     return;
 }
-deletedList.unshift(joinList[index]);
+waitingList.push(joinList[index]);
+joinList.splice(index,1);
+render();
+}
+
+function removePlayer(id, source = "join"){
+const list = source === "join" ? joinList : waitingList;
+const index = list.findIndex(x=>x.id===id);
+if(index===-1){
+    return;
+}
+deletedList.unshift(list[index]);
 if(deletedList.length > 5){
     deletedList.length = 5;
 }
-joinList.splice(index,1);
+list.splice(index,1);
 render();
 }
 
@@ -443,10 +478,16 @@ const exists = waitingList.some(x=>x.id===id) || joinList.some(x=>x.id===id);
 if(exists){
     return;
 }
+const deletedIndex = deletedList.findIndex(x=>x.id===id);
+let savedCount = 0;
+if(deletedIndex !== -1){
+    savedCount = deletedList[deletedIndex].count || 0;
+    deletedList.splice(deletedIndex, 1);
+}
 waitingList.push({
     id,
     name,
-    count:0
+    count: savedCount
 });
 render();
 }
