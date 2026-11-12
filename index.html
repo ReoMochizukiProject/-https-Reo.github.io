@@ -1,14 +1,13 @@
 <!DOCTYPE html>
-<html lang='ja'>
+<html lang="ja">
 <head>
-<meta charset='UTF-8'>
-<meta name='viewport' content='width=device-width,initial-scale=1'>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>参加管理ツール</title>
 
-<script src='https://accounts.google.com/gsi/client'></script>
+<script src="https://accounts.google.com/gsi/client"></script>
 
 <style>
-
 *{
 margin:0;
 padding:0;
@@ -54,6 +53,7 @@ margin-top:20px;
 display:flex;
 gap:10px;
 flex-wrap:wrap;
+align-items:center;
 }
 
 button{
@@ -66,6 +66,22 @@ padding:10px 16px;
 .loginBtn{
 background:#4285F4;
 color:#fff;
+}
+
+.connectBtn{
+background:#0F9D58;
+color:#fff;
+}
+
+.urlInput{
+padding:10px;
+border-radius:8px;
+border:1px solid #444;
+background:#222;
+color:#fff;
+min-width:260px;
+flex:1;
+max-width:450px;
 }
 
 .status{
@@ -90,6 +106,7 @@ border:1px solid rgba(255,255,255,.1);
 flex:1;
 padding:12px;
 font-weight:bold;
+color:#fff;
 }
 
 .blue{
@@ -149,6 +166,7 @@ align-items:center;
 .counter button{
 width:30px;
 height:30px;
+padding:0;
 }
 
 .count0{
@@ -172,7 +190,6 @@ display:block;
 }
 
 @media(max-width:768px){
-
 .person{
     flex-direction:column;
     align-items:flex-start;
@@ -183,9 +200,7 @@ display:block;
     width:100%;
     justify-content:flex-end;
 }
-
 }
-
 </style>
 </head>
 
@@ -193,616 +208,399 @@ display:block;
 
 <header>
 
-<div class='hero'>
-
-<img
-src='https://picsum.photos/1200/400'
-alt=''>
-
-<div class='overlay' id='overlayText'>
+<div class="hero">
+<img src="https://picsum.photos/1200/400" alt="">
+<div class="overlay" id="overlayText">
 参加管理ツール
 </div>
-
 </div>
 
-<div class='googleConnect'>
-
-<button
-class='loginBtn'
-id='loginBtn'>
+<div class="googleConnect">
+<button class="loginBtn" id="loginBtn">
 Googleでログイン
 </button>
 
-<div
-class='status'
-id='status'>
+<input type="text" class="urlInput" id="liveUrlInput" placeholder="YouTube配信のURLを貼り付け">
+
+<button class="connectBtn" id="connectBtn">
+チャット取得開始
+</button>
+
+<div class="status" id="status">
 未接続
 </div>
-
 </div>
 
 </header>
 
 <main>
 
-<div class='slide'>
-
-<button
-class='modeBtn blue activeMode'
-data-mode='blue'>
+<div class="slide">
+<button class="modeBtn blue activeMode" data-mode="blue">
 参加管理
 </button>
-
-<button
-class='modeBtn red'
-data-mode='red'>
+<button class="modeBtn red" data-mode="red">
 削除
 </button>
-
-<button
-class='modeBtn orange'
-data-mode='orange'>
+<button class="modeBtn orange" data-mode="orange">
 復元
 </button>
-
 </div>
 
-<div class='tools'>
-
-<button id='battleBtn'>
+<div class="tools">
+<button id="battleBtn">
 全員対戦＋1
 </button>
-
-<button id='priorityBtn'>
+<button id="priorityBtn">
 先頭を参加中へ
 </button>
-
 </div>
 
-<div class='section'>
-
-<h2>
-参加中（最大5人）
-</h2>
-
-<div id='joinList'></div>
-
+<div class="section">
+<h2>参加中（最大5人）</h2>
+<div id="joinList"></div>
 </div>
 
-<div class='section'>
-
-<h2>
-待機中
-</h2>
-
-<div id='waitingList'></div>
-
+<div class="section">
+<h2>待機中</h2>
+<div id="waitingList"></div>
 </div>
 
-<div class='section deleted' id='deletedArea'>
-
-<h2>
-削除履歴
-</h2>
-
-<div id='deletedList'></div>
-
+<div class="section deleted" id="deletedArea">
+<h2>削除履歴</h2>
+<div id="deletedList"></div>
 </div>
 
 </main>
 
 <script>
+const CLIENT_ID = "XXXX";
 
-const CLIENT_ID = '686808933417-dauea23l9ieg66v3jrbun6mdur3oq29p.apps.googleusercontent.com';
+let mode = "blue";
+let accessToken = "";
+let liveChatId = "";
+let nextPageToken = "";
+let pollingTimer = null;
 
-let mode = 'blue';
-
-let accessToken = '';
-
-let liveChatId = '';
-
-let nextPageToken = '';
-
-const joinList =
-JSON.parse(localStorage.getItem('joinList') || '[]');
-
-const waitingList =
-JSON.parse(localStorage.getItem('waitingList') || '[]');
-
-const deletedList =
-JSON.parse(localStorage.getItem('deletedList') || '[]');
+const joinList = JSON.parse(localStorage.getItem("joinList") || "[]");
+const waitingList = JSON.parse(localStorage.getItem("waitingList") || "[]");
+const deletedList = JSON.parse(localStorage.getItem("deletedList") || "[]");
 
 function save(){
-
-localStorage.setItem(
-    'joinList',
-    JSON.stringify(joinList)
-);
-
-localStorage.setItem(
-    'waitingList',
-    JSON.stringify(waitingList)
-);
-
-localStorage.setItem(
-    'deletedList',
-    JSON.stringify(deletedList)
-);
-
+localStorage.setItem("joinList", JSON.stringify(joinList));
+localStorage.setItem("waitingList", JSON.stringify(waitingList));
+localStorage.setItem("deletedList", JSON.stringify(deletedList));
 }
 
 function countClass(count){
-
 if(count >= 2){
-    return 'count2';
+    return "count2";
 }
-
 if(count === 1){
-    return 'count1';
+    return "count1";
 }
-
-return 'count0';
-
+return "count0";
 }
 
 function render(){
-
-const join =
-document.querySelector('#joinList');
-
-join.innerHTML = '';
+const join = document.querySelector("#joinList");
+join.innerHTML = "";
 
 joinList.forEach(player=>{
-
-    const div =
-    document.createElement('div');
-
-    div.className = 'person';
-
-    div.innerHTML =
-    `
-    <div class='${countClass(player.count)}'>
+    const div = document.createElement("div");
+    div.className = "person";
+    div.innerHTML = `
+    <div class="${countClass(player.count)}">
         ${player.name}
     </div>
-
-    <div class='counter'>
-
-        <button
-        onclick='changeCount('${player.id}',-1)'>
-        <
-        </button>
-
+    <div class="counter">
+        <button onclick="event.stopPropagation(); changeCount('${player.id}',-1)">&lt;</button>
         ${player.count}
-
-        <button
-        onclick='changeCount('${player.id}',1)'>
-        >
-        </button>
-
+        <button onclick="event.stopPropagation(); changeCount('${player.id}',1)">&gt;</button>
     </div>
     `;
 
     div.onclick = ()=>{
-
-        if(mode === 'red'){
-
+        if(mode === "red"){
             removePlayer(player.id);
-
         }
-
     };
 
     join.appendChild(div);
-
 });
 
-const waiting =
-document.querySelector('#waitingList');
-
-waiting.innerHTML = '';
+const waiting = document.querySelector("#waitingList");
+waiting.innerHTML = "";
 
 waitingList.forEach(player=>{
-
-    const div =
-    document.createElement('div');
-
-    div.className = 'person';
-
-    div.textContent =
-    player.name;
+    const div = document.createElement("div");
+    div.className = "person";
+    div.textContent = player.name;
 
     div.onclick = ()=>{
-
-        if(mode === 'blue'){
-
+        if(mode === "blue"){
             moveToJoin(player.id);
-
         }
-
     };
 
     waiting.appendChild(div);
-
 });
 
-const deleted =
-document.querySelector('#deletedList');
-
-deleted.innerHTML = '';
+const deleted = document.querySelector("#deletedList");
+deleted.innerHTML = "";
 
 deletedList.forEach(player=>{
-
-    const div =
-    document.createElement('div');
-
-    div.className = 'person';
-
-    div.textContent =
-    player.name;
+    const div = document.createElement("div");
+    div.className = "person";
+    div.textContent = player.name;
 
     div.onclick = ()=>{
-
-        if(mode === 'orange'){
-
+        if(mode === "orange"){
             restorePlayer(player.id);
-
         }
-
     };
 
     deleted.appendChild(div);
-
 });
 
 save();
-
 }
 
 function moveToJoin(id){
-
 if(joinList.length >= 5){
     return;
 }
-
-const index =
-waitingList.findIndex(
-    x=>x.id===id
-);
-
+const index = waitingList.findIndex(x=>x.id===id);
 if(index===-1){
     return;
 }
-
-joinList.push(
-    waitingList[index]
-);
-
+joinList.push(waitingList[index]);
 waitingList.splice(index,1);
-
 render();
-
 }
 
 function removePlayer(id){
-
-const index =
-joinList.findIndex(
-    x=>x.id===id
-);
-
+const index = joinList.findIndex(x=>x.id===id);
 if(index===-1){
     return;
 }
-
-deletedList.unshift(
-    joinList[index]
-);
-
+deletedList.unshift(joinList[index]);
 if(deletedList.length > 5){
-
     deletedList.length = 5;
-
 }
-
 joinList.splice(index,1);
-
 render();
-
 }
 
 function restorePlayer(id){
-
 if(joinList.length >= 5){
     return;
 }
-
-const index =
-deletedList.findIndex(
-    x=>x.id===id
-);
-
+const index = deletedList.findIndex(x=>x.id===id);
 if(index===-1){
     return;
 }
-
-joinList.push(
-    deletedList[index]
-);
-
+joinList.push(deletedList[index]);
 deletedList.splice(index,1);
-
 render();
-
 }
 
 function changeCount(id,value){
-
-const player =
-joinList.find(
-    x=>x.id===id
-);
-
+const player = joinList.find(x=>x.id===id);
 if(!player){
     return;
 }
-
-player.count =
-Math.max(
-    0,
-    player.count + value
-);
-
+player.count = Math.max(0, player.count + value);
 render();
-
 }
 
-document
-.querySelector('#battleBtn')
-.onclick = ()=>{
-
+document.querySelector("#battleBtn").onclick = ()=>{
 joinList.forEach(x=>{
-
     x.count++;
-
 });
-
 render();
-
 };
 
-document
-.querySelector('#priorityBtn')
-.onclick = ()=>{
-
+document.querySelector("#priorityBtn").onclick = ()=>{
 if(waitingList.length===0){
     return;
 }
-
-moveToJoin(
-    waitingList[0].id
-);
-
+moveToJoin(waitingList[0].id);
 };
 
-document
-.querySelectorAll('.modeBtn')
-.forEach(btn=>{
-
+document.querySelectorAll(".modeBtn").forEach(btn=>{
 btn.onclick = ()=>{
-
-    document
-    .querySelectorAll('.modeBtn')
-    .forEach(x=>
-        x.classList.remove('activeMode')
-    );
-
-    btn.classList.add(
-        'activeMode'
-    );
-
-    mode =
-    btn.dataset.mode;
-
-    document
-    .querySelector('#deletedArea')
-    .classList.toggle(
-        'showDeleted',
-        mode==='orange'
-    );
-
+    document.querySelectorAll(".modeBtn").forEach(x=>x.classList.remove("activeMode"));
+    btn.classList.add("activeMode");
+    mode = btn.dataset.mode;
+    document.querySelector("#deletedArea").classList.toggle("showDeleted", mode==="orange");
 };
-
 });
 
 function addWaitingPlayer(id,name){
-
-const exists =
-waitingList.some(
-    x=>x.id===id
-) ||
-joinList.some(
-    x=>x.id===id
-);
-
+const exists = waitingList.some(x=>x.id===id) || joinList.some(x=>x.id===id);
 if(exists){
     return;
 }
-
 waitingList.push({
     id,
     name,
     count:0
 });
-
 render();
+}
 
+function extractVideoId(url){
+try {
+    const u = new URL(url.trim());
+    if(u.hostname.includes("youtu.be")){
+        return u.pathname.slice(1);
+    }
+    if(u.searchParams.has("v")){
+        return u.searchParams.get("v");
+    }
+    if(u.pathname.includes("/live/")){
+        return u.pathname.split("/live/")[1].split("/")[0];
+    }
+} catch(e) {
+    if(/^[a-zA-Z0-9_-]{11}$/.test(url.trim())){
+        return url.trim();
+    }
+}
+return null;
 }
 
 let tokenClient;
 
 window.onload = ()=>{
-
-tokenClient =
-google.accounts.oauth2.initTokenClient({
-
+tokenClient = google.accounts.oauth2.initTokenClient({
     client_id: CLIENT_ID,
-
-    scope:
-    'https://www.googleapis.com/auth/youtube.readonly',
-
-    callback: async(response)=>{
-
-        accessToken =
-        response.access_token;
-
-        document
-        .querySelector('#status')
-        .textContent =
-        '接続成功';
-
-        await getCurrentLive();
-
-    }
-
-});
-
-};
-
-document
-.querySelector('#loginBtn')
-.onclick = ()=>{
-
-tokenClient.requestAccessToken();
-
-};
-
-async function getCurrentLive(){
-
-const liveRes =
-await fetch(
-    'https://www.googleapis.com/youtube/v3/liveBroadcasts?part=snippet,status&broadcastStatus=active&mine=true',
-    {
-        headers:{
-            Authorization:
-            `Bearer ${accessToken}`
+    scope: "https://www.googleapis.com/auth/youtube.readonly",
+    callback: (response)=>{
+        if(response.error){
+            document.querySelector("#status").textContent = "ログイン失敗";
+            return;
         }
+        accessToken = response.access_token;
+        document.querySelector("#status").textContent = "ログイン完了（URLを入力してください）";
     }
-);
+});
+};
 
-const liveData =
-await liveRes.json();
+document.querySelector("#loginBtn").onclick = ()=>{
+tokenClient.requestAccessToken();
+};
 
-if(!liveData.items?.length){
+document.querySelector("#connectBtn").onclick = async ()=>{
+const statusEl = document.querySelector("#status");
 
-    document
-    .querySelector('#status')
-    .textContent =
-    '配信中ライブなし';
-
+if(!accessToken){
+    statusEl.textContent = "先にGoogleでログインしてください";
     return;
-
 }
 
-const videoId =
-liveData.items[0].id;
+const url = document.querySelector("#liveUrlInput").value;
+const videoId = extractVideoId(url);
 
-const videoRes =
-await fetch(
-    `https://www.googleapis.com/youtube/v3/videos?part=liveStreamingDetails&id=${videoId}`,
-    {
-        headers:{
-            Authorization:
-            `Bearer ${accessToken}`
+if(!videoId){
+    statusEl.textContent = "正しいYouTubeのURLを入力してください";
+    return;
+}
+
+if(pollingTimer){
+    clearTimeout(pollingTimer);
+    nextPageToken = "";
+}
+
+statusEl.textContent = "配信情報を取得中...";
+await getLiveChatByVideoId(videoId);
+};
+
+async function getLiveChatByVideoId(videoId){
+const statusEl = document.querySelector("#status");
+
+try {
+    const videoRes = await fetch(
+        `https://www.googleapis.com/youtube/v3/videos?part=liveStreamingDetails&id=${videoId}`,
+        {
+            headers:{
+                Authorization: `Bearer ${accessToken}`
+            }
         }
+    );
+
+    const videoData = await videoRes.json();
+
+    if(!videoData.items?.length){
+        statusEl.textContent = "動画が見つかりません";
+        return;
     }
-);
 
-const videoData =
-await videoRes.json();
+    const details = videoData.items[0].liveStreamingDetails;
+    if(!details || !details.activeLiveChatId){
+        statusEl.textContent = "配信中ではないか、チャットが無効です";
+        return;
+    }
 
-liveChatId =
-videoData.items[0]
-.liveStreamingDetails
-.activeLiveChatId;
+    liveChatId = details.activeLiveChatId;
+    statusEl.textContent = "チャット取得中...";
+    startPolling();
 
-startPolling();
-
+} catch(err) {
+    statusEl.textContent = "通信エラーが発生しました";
+    console.error(err);
+}
 }
 
 async function startPolling(){
-
-const params =
-new URLSearchParams();
-
-params.set(
-    'liveChatId',
-    liveChatId
-);
-
-params.set(
-    'part',
-    'snippet,authorDetails'
-);
+const params = new URLSearchParams();
+params.set("liveChatId", liveChatId);
+params.set("part", "snippet,authorDetails");
 
 if(nextPageToken){
-
-    params.set(
-        'pageToken',
-        nextPageToken
-    );
-
+    params.set("pageToken", nextPageToken);
 }
 
-const res =
-await fetch(
-    `https://www.googleapis.com/youtube/v3/liveChat/messages?${params}`,
-    {
-        headers:{
-            Authorization:
-            `Bearer ${accessToken}`
+try {
+    const res = await fetch(
+        `https://www.googleapis.com/youtube/v3/liveChat/messages?${params}`,
+        {
+            headers:{
+                Authorization: `Bearer ${accessToken}`
+            }
         }
-    }
-);
+    );
 
-const data =
-await res.json();
+    const data = await res.json();
 
-nextPageToken =
-data.nextPageToken;
-
-data.items?.forEach(item=>{
-
-    const message =
-    item.snippet.displayMessage;
-
-    const name =
-    item.authorDetails.displayName;
-
-    const id =
-    item.authorDetails.channelId;
-
-    if(
-        message.includes('参加希望')
-    ){
-
-        addWaitingPlayer(
-            id,
-            name
-        );
-
+    if(data.error){
+        document.querySelector("#status").textContent = "取得エラー: " + data.error.message;
+        return;
     }
 
-});
+    nextPageToken = data.nextPageToken;
 
-setTimeout(
-    startPolling,
-    data.pollingIntervalMillis || 5000
-);
+    data.items?.forEach(item=>{
+        const message = item.snippet.displayMessage;
+        const name = item.authorDetails.displayName;
+        const id = item.authorDetails.channelId;
 
+        if(message.includes("参加希望")){
+            addWaitingPlayer(id, name);
+        }
+    });
+
+    pollingTimer = setTimeout(
+        startPolling,
+        data.pollingIntervalMillis || 5000
+    );
+} catch(err) {
+    console.error(err);
+    pollingTimer = setTimeout(startPolling, 5000);
+}
 }
 
 render();
-
 </script>
 
 </body>
