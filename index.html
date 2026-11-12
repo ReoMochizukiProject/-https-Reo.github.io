@@ -15,9 +15,12 @@ box-sizing:border-box;
 }
 
 body{
-background:#111;
+background-color:#111;
+background-image:radial-gradient(rgba(255, 140, 0, 0.35) 2px, transparent 2px);
+background-size:24px 24px;
 color:#fff;
 font-family:sans-serif;
+padding-bottom:130px;
 }
 
 header{
@@ -133,10 +136,11 @@ flex-wrap:wrap;
 }
 
 .section{
-background:#1b1b1b;
+background:rgba(27, 27, 27, 0.92);
 padding:15px;
 border-radius:12px;
 margin-bottom:20px;
+border:1px solid rgba(255, 140, 0, 0.2);
 }
 
 .section h2{
@@ -195,6 +199,103 @@ display:none;
 display:block;
 }
 
+/* 追従キャラクターバナー */
+.charaBanner{
+position:fixed;
+bottom:20px;
+right:20px;
+display:flex;
+align-items:flex-end;
+gap:12px;
+z-index:1000;
+pointer-events:none;
+}
+
+.speechBubble{
+position:relative;
+background:#fff;
+color:#111;
+padding:12px 16px;
+border-radius:16px;
+font-size:14px;
+font-weight:bold;
+line-height:1.4;
+max-width:240px;
+box-shadow:0 6px 20px rgba(0,0,0,0.6);
+border:3px solid #FF8C00;
+opacity:0;
+transform:translateY(10px) scale(0.95);
+animation:bubblePop 0.4s ease-out 0.9s forwards;
+pointer-events:auto;
+}
+
+.speechBubble::after{
+content:"";
+position:absolute;
+right:-12px;
+bottom:18px;
+border-style:solid;
+border-width:8px 0 8px 12px;
+border-color:transparent transparent transparent #FF8C00;
+}
+
+.charaAvatar{
+width:76px;
+height:76px;
+border-radius:50%;
+background:linear-gradient(135deg, #FF9800, #EF6C00);
+border:3px solid #fff;
+box-shadow:0 6px 20px rgba(0,0,0,0.6);
+display:flex;
+align-items:center;
+justify-content:center;
+overflow:hidden;
+pointer-events:auto;
+cursor:pointer;
+animation:spinEnter 1s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.charaAvatar img{
+width:100%;
+height:100%;
+object-fit:cover;
+display:block;
+}
+
+.charaSpin{
+animation:spinReact 0.5s ease-in-out;
+}
+
+@keyframes spinEnter{
+0%{
+    transform:translateX(160px) rotate(-720deg) scale(0.5);
+    opacity:0;
+}
+100%{
+    transform:translateX(0) rotate(0deg) scale(1);
+    opacity:1;
+}
+}
+
+@keyframes spinReact{
+0%{
+    transform:rotate(0deg) scale(1);
+}
+50%{
+    transform:rotate(180deg) scale(1.12);
+}
+100%{
+    transform:rotate(360deg) scale(1);
+}
+}
+
+@keyframes bubblePop{
+to{
+    opacity:1;
+    transform:translateY(0) scale(1);
+}
+}
+
 @media(max-width:768px){
 .person{
     flex-direction:column;
@@ -205,6 +306,23 @@ display:block;
 .counter{
     width:100%;
     justify-content:flex-end;
+}
+
+.charaBanner{
+    bottom:12px;
+    right:12px;
+    gap:8px;
+}
+
+.speechBubble{
+    font-size:12px;
+    padding:10px 12px;
+    max-width:190px;
+}
+
+.charaAvatar{
+    width:62px;
+    height:62px;
 }
 }
 </style>
@@ -279,6 +397,16 @@ Googleでログイン
 
 </main>
 
+<!-- 追従キャラクターバナー -->
+<div class="charaBanner" id="charaBanner">
+<div class="speechBubble" id="charaSpeech">
+</div>
+<div class="charaAvatar" id="charaAvatar" title="クリックでくるっと回転">
+<!-- ▼ ここの src="" の中に用意したキャラクター画像のパスやURLを貼り付けてください ▼ -->
+<img id="charaImg" src="character.png" alt="キャラクター">
+</div>
+</div>
+
 <script>
 const CLIENT_ID = "686808933417-dauea23l9ieg66v3jrbun6mdur3oq29p.apps.googleusercontent.com";
 
@@ -292,6 +420,28 @@ let tokenClient = null;
 const joinList = JSON.parse(localStorage.getItem("joinList") || "[]");
 const waitingList = JSON.parse(localStorage.getItem("waitingList") || "[]");
 const deletedList = JSON.parse(localStorage.getItem("deletedList") || "[]");
+
+const modeSpeeches = {
+blue: "【参加管理モード】待機中と参加中をクリックで入れ替えられるよ！",
+red: "【削除モード】リストの名前をクリックすると削除できるよ！",
+orange: "【復元モード】削除履歴から名前をクリックして参加中へ戻せるよ！"
+};
+
+function updateCharaSpeech(text, spin = true){
+const speechEl = document.querySelector("#charaSpeech");
+const avatarEl = document.querySelector("#charaAvatar");
+speechEl.textContent = text;
+
+if(spin){
+    avatarEl.classList.remove("charaSpin");
+    void avatarEl.offsetWidth;
+    avatarEl.classList.add("charaSpin");
+}
+}
+
+document.querySelector("#charaAvatar").onclick = ()=>{
+updateCharaSpeech(modeSpeeches[mode], true);
+};
 
 function save(){
 localStorage.setItem("joinList", JSON.stringify(joinList));
@@ -393,14 +543,17 @@ save();
 
 function moveToJoin(id){
 if(joinList.length >= 5){
+    updateCharaSpeech("参加中は最大5人までだよ！誰かを待機中へ戻してね。", false);
     return;
 }
 const index = waitingList.findIndex(x=>x.id===id);
 if(index===-1){
     return;
 }
-joinList.push(waitingList[index]);
+const player = waitingList[index];
+joinList.push(player);
 waitingList.splice(index,1);
+updateCharaSpeech(`${player.name}さんを参加中へ移動したよ！`, false);
 render();
 }
 
@@ -409,8 +562,10 @@ const index = joinList.findIndex(x=>x.id===id);
 if(index===-1){
     return;
 }
-waitingList.push(joinList[index]);
+const player = joinList[index];
+waitingList.push(player);
 joinList.splice(index,1);
+updateCharaSpeech(`${player.name}さんを待機中へ戻したよ！（対戦数: ${player.count}）`, false);
 render();
 }
 
@@ -420,24 +575,29 @@ const index = list.findIndex(x=>x.id===id);
 if(index===-1){
     return;
 }
-deletedList.unshift(list[index]);
+const player = list[index];
+deletedList.unshift(player);
 if(deletedList.length > 5){
     deletedList.length = 5;
 }
 list.splice(index,1);
+updateCharaSpeech(`${player.name}さんを削除履歴へ移したよ。`, false);
 render();
 }
 
 function restorePlayer(id){
 if(joinList.length >= 5){
+    updateCharaSpeech("参加中がいっぱいだよ！空きを作ってから復元してね。", false);
     return;
 }
 const index = deletedList.findIndex(x=>x.id===id);
 if(index===-1){
     return;
 }
-joinList.push(deletedList[index]);
+const player = deletedList[index];
+joinList.push(player);
 deletedList.splice(index,1);
+updateCharaSpeech(`${player.name}さんを参加中へ復元したよ！`, false);
 render();
 }
 
@@ -454,11 +614,13 @@ document.querySelector("#battleBtn").onclick = ()=>{
 joinList.forEach(x=>{
     x.count++;
 });
+updateCharaSpeech("参加中メンバー全員の対戦数を＋1したよ！", true);
 render();
 };
 
 document.querySelector("#priorityBtn").onclick = ()=>{
 if(waitingList.length===0){
+    updateCharaSpeech("待機中のプレイヤーがいないみたい！", false);
     return;
 }
 moveToJoin(waitingList[0].id);
@@ -470,6 +632,7 @@ btn.onclick = ()=>{
     btn.classList.add("activeMode");
     mode = btn.dataset.mode;
     document.querySelector("#deletedArea").classList.toggle("showDeleted", mode==="orange");
+    updateCharaSpeech(modeSpeeches[mode], true);
 };
 });
 
@@ -487,6 +650,7 @@ waitingList.push({
     name,
     count: 0
 });
+updateCharaSpeech(`${name}さんが待機中に参加したよ！`, true);
 render();
 }
 
