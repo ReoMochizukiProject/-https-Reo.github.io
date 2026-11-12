@@ -479,15 +479,13 @@ if(exists){
     return;
 }
 const deletedIndex = deletedList.findIndex(x=>x.id===id);
-let savedCount = 0;
 if(deletedIndex !== -1){
-    savedCount = deletedList[deletedIndex].count || 0;
     deletedList.splice(deletedIndex, 1);
 }
 waitingList.push({
     id,
     name,
-    count: savedCount
+    count: 0
 });
 render();
 }
