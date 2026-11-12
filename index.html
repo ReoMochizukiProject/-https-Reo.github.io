@@ -27,32 +27,8 @@ header{
 padding:20px;
 }
 
-.hero{
-position:relative;
-height:250px;
-overflow:hidden;
-border-radius:12px;
-}
-
-.hero img{
-width:100%;
-height:100%;
-object-fit:cover;
-}
-
-.overlay{
-position:absolute;
-inset:0;
-background:rgba(0,0,0,.45);
-display:flex;
-align-items:center;
-justify-content:center;
-font-size:24px;
-font-weight:bold;
-}
-
 .googleConnect{
-margin-top:20px;
+margin-top:10px;
 display:flex;
 gap:10px;
 flex-wrap:wrap;
@@ -63,8 +39,13 @@ button{
 cursor:pointer;
 border:none;
 border-radius:8px;
-padding:20px;
-margin:3px
+padding:14px 18px;
+font-weight:bold;
+}
+
+button:disabled{
+opacity:0.5;
+cursor:not-allowed;
 }
 
 .loginBtn{
@@ -77,21 +58,43 @@ background:#0F9D58;
 color:#fff;
 }
 
+.pauseBtn{
+background:#E65100;
+color:#fff;
+}
+
+.pauseBtn.paused{
+background:#0288D1;
+}
+
 .urlInput{
-padding:10px;
+padding:12px;
 border-radius:8px;
 border:1px solid #444;
 background:#222;
 color:#fff;
 min-width:260px;
 flex:1;
-max-width:450px;
+max-width:420px;
 }
 
 .status{
-padding:10px;
+padding:10px 14px;
 border-radius:8px;
 background:#222;
+border:1px solid #333;
+font-size:14px;
+}
+
+.quotaInfo{
+margin-top:10px;
+padding:8px 14px;
+border-radius:8px;
+background:rgba(34, 34, 34, 0.9);
+border:1px solid rgba(255, 140, 0, 0.3);
+font-size:13px;
+color:#ffd180;
+display:inline-block;
 }
 
 main{
@@ -132,6 +135,7 @@ outline:3px solid white;
 .tools{
 margin-bottom:20px;
 display:flex;
+gap:8px;
 flex-wrap:wrap;
 }
 
@@ -343,10 +347,18 @@ Googleでログイン
 チャット取得開始
 </button>
 
+<!--<button class="pauseBtn" id="pauseBtn" disabled>
+一時停止
+</button>-->
+
 <div class="status" id="status">
 未接続
 </div>
 </div>
+
+<!--<div class="quotaInfo" id="quotaInfo">
+本日のAPI消費目安: 0 / 10,000 ユニット（残り約 2,000 回 / 約 6.1 時間稼働可能）
+</div>-->
 
 </header>
 
@@ -403,19 +415,58 @@ Googleでログイン
 <script>
 const CLIENT_ID = "686808933417-dauea23l9ieg66v3jrbun6mdur3oq29p.apps.googleusercontent.com";
 
+// 1日6時間稼働用の固定取得間隔（11秒 = 約6.1時間分）
+const POLLING_INTERVAL_MS = 11000;
+
 let mode = "blue";
 let accessToken = "";
 let liveChatId = "";
 let nextPageToken = "";
 let pollingTimer = null;
 let tokenClient = null;
-
-// 直近の「参加希望」コメント履歴を保持（key: channelId, value: { name, timestamp }）
-const recentJoinComments = new Map();
+let isPaused = false;
 
 const joinList = JSON.parse(localStorage.getItem("joinList") || "[]");
 const waitingList = JSON.parse(localStorage.getItem("waitingList") || "[]");
 const deletedList = JSON.parse(localStorage.getItem("deletedList") || "[]");
+
+// 直近の「参加希望」コメント投稿時刻を記録（キー: channelId, 値: timestamp(ms)）
+const recentJoinComments = {};
+
+// API消費量トラッキング（1日の上限目安: 10,000ユニット）
+const DAILY_QUOTA_LIMIT = 10000;
+function getQuotaDateKey(){
+    const now = new Date();
+    return `${now.getFullYear()}-${now.getMonth()+1}-${now.getDate()}`;
+}
+
+function loadQuotaUsed(){
+    const saved = JSON.parse(localStorage.getItem("ytQuotaTracker") || "{}");
+    if(saved.date === getQuotaDateKey()){
+        return saved.used || 0;
+    }
+    return 0;
+}
+
+let usedQuota = loadQuotaUsed();
+
+function addQuotaCost(units){
+    usedQuota += units;
+    localStorage.setItem("ytQuotaTracker", JSON.stringify({
+        date: getQuotaDateKey(),
+        used: usedQuota
+    }));
+    updateQuotaDisplay();
+}
+
+function updateQuotaDisplay(){
+    const remainingUnits = Math.max(0, DAILY_QUOTA_LIMIT - usedQuota);
+    const remainingCalls = Math.floor(remainingUnits / 5);
+    const intervalSec = POLLING_INTERVAL_MS / 1000;
+    const remainingHours = ((remainingCalls * intervalSec) / 3600).toFixed(1);
+    document.querySelector("#quotaInfo").textContent =
+        `本日のAPI消費目安: ${usedQuota.toLocaleString()} / 10,000 ユニット（残り約 ${remainingCalls.toLocaleString()} 回 / 約 ${remainingHours} 時間稼働可能）`;
+}
 
 const modeSpeeches = {
 blue: "【参加管理モード】待機中と参加中をクリックで入れ替えられるよ！",
@@ -572,28 +623,25 @@ if(index===-1){
     return;
 }
 const player = list[index];
-deletedList.unshift(player);
-if(deletedList.length > 5){
-    deletedList.length = 5;
-}
 list.splice(index,1);
 
-// 過去30秒以内に「参加希望」コメントをしていたかチェック
-const recentComment = recentJoinComments.get(id);
-const now = Date.now();
-if(recentComment && (now - recentComment.timestamp) <= 30000){
-    recentJoinComments.delete(id);
-    const deletedIndex = deletedList.findIndex(x=>x.id===id);
-    if(deletedIndex !== -1){
-        deletedList.splice(deletedIndex, 1);
-    }
+// 過去30秒以内に「参加希望」コメントをしていたか判定
+const lastCommentTime = recentJoinComments[player.id];
+const isWithin30Sec = lastCommentTime && (Date.now() - lastCommentTime <= 30000);
+
+if(isWithin30Sec){
+    delete recentJoinComments[player.id];
     waitingList.push({
         id: player.id,
-        name: recentComment.name || player.name,
+        name: player.name,
         count: 0
     });
-    updateCharaSpeech(`${player.name}さんは30秒以内に参加希望をしていたため、待機中へ再登録したよ！`, true);
+    updateCharaSpeech(`${player.name}さんは直近30秒以内に参加希望があったため待機中へ再登録したよ！`, true);
 } else {
+    deletedList.unshift(player);
+    if(deletedList.length > 5){
+        deletedList.length = 5;
+    }
     updateCharaSpeech(`${player.name}さんを削除履歴へ移したよ。`, false);
 }
 
@@ -652,17 +700,13 @@ btn.onclick = ()=>{
 });
 
 function addWaitingPlayer(id, name, commentTimestamp = Date.now()){
-// 参加希望コメントの時刻を記録（すでにリストにいても最新のコメント時刻で上書き）
-recentJoinComments.set(id, {
-    name,
-    timestamp: commentTimestamp
-});
+// すでにリストに存在する場合でも、直近の「参加希望」時刻を更新しておく
+recentJoinComments[id] = commentTimestamp;
 
 const exists = waitingList.some(x=>x.id===id) || joinList.some(x=>x.id===id);
 if(exists){
     return;
 }
-recentJoinComments.delete(id);
 const deletedIndex = deletedList.findIndex(x=>x.id===id);
 if(deletedIndex !== -1){
     deletedList.splice(deletedIndex, 1);
@@ -720,6 +764,7 @@ return true;
 window.addEventListener("load", ()=>{
 initGoogleAuth();
 updateCharaSpeech(modeSpeeches[mode], false);
+updateQuotaDisplay();
 });
 
 document.querySelector("#loginBtn").onclick = ()=>{
@@ -754,17 +799,51 @@ if(!videoId){
 
 if(pollingTimer){
     clearTimeout(pollingTimer);
-    nextPageToken = "";
+    pollingTimer = null;
 }
+nextPageToken = "";
+isPaused = false;
+const pauseBtn = document.querySelector("#pauseBtn");
+pauseBtn.textContent = "一時停止";
+pauseBtn.classList.remove("paused");
+pauseBtn.disabled = true;
 
 statusEl.textContent = "配信情報を取得中...";
 await getLiveChatByVideoId(videoId);
+};
+
+document.querySelector("#pauseBtn").onclick = ()=>{
+if(!liveChatId){
+    return;
+}
+const pauseBtn = document.querySelector("#pauseBtn");
+const statusEl = document.querySelector("#status");
+
+if(!isPaused){
+    isPaused = true;
+    if(pollingTimer){
+        clearTimeout(pollingTimer);
+        pollingTimer = null;
+    }
+    pauseBtn.textContent = "取得再開";
+    pauseBtn.classList.add("paused");
+    statusEl.textContent = "一時停止中（API消費ゼロ）";
+    updateCharaSpeech("チャット取得を一時停止したよ！API枠を節約中！", false);
+} else {
+    isPaused = false;
+    pauseBtn.textContent = "一時停止";
+    pauseBtn.classList.remove("paused");
+    statusEl.textContent = "チャット取得再開中...";
+    updateCharaSpeech("チャット取得を再開したよ！", false);
+    startPolling();
+}
 };
 
 async function getLiveChatByVideoId(videoId){
 const statusEl = document.querySelector("#status");
 
 try {
+    addQuotaCost(1); // videos.list は 1 ユニット消費
     const videoRes = await fetch(
         `https://www.googleapis.com/youtube/v3/videos?part=liveStreamingDetails&id=${videoId}`,
         {
@@ -775,6 +854,11 @@ try {
     );
 
     const videoData = await videoRes.json();
+
+    if(videoData.error){
+        statusEl.textContent = "取得エラー: " + videoData.error.message;
+        return;
+    }
 
     if(!videoData.items?.length){
         statusEl.textContent = "動画が見つかりません";
@@ -788,6 +872,7 @@ try {
     }
 
     liveChatId = details.activeLiveChatId;
+    document.querySelector("#pauseBtn").disabled = false;
     statusEl.textContent = "チャット取得中...";
     startPolling();
 
@@ -798,6 +883,10 @@ try {
 }
 
 async function startPolling(){
+if(isPaused){
+    return;
+}
+
 const params = new URLSearchParams();
 params.set("liveChatId", liveChatId);
 params.set("part", "snippet,authorDetails");
@@ -807,6 +896,7 @@ if(nextPageToken){
 }
 
 try {
+    addQuotaCost(5); // liveChatMessages.list は 5 ユニット消費
     const res = await fetch(
         `https://www.googleapis.com/youtube/v3/liveChat/messages?${params}`,
         {
@@ -825,14 +915,6 @@ try {
 
     nextPageToken = data.nextPageToken;
 
-    const now = Date.now();
-    // 30秒以上経過した古い履歴をクリーンアップ
-    for(const [key, val] of recentJoinComments.entries()){
-        if(now - val.timestamp > 30000){
-            recentJoinComments.delete(key);
-        }
-    }
-
     data.items?.forEach(item=>{
         const message = item.snippet.displayMessage;
         const name = item.authorDetails.displayName;
@@ -844,13 +926,16 @@ try {
         }
     });
 
-    pollingTimer = setTimeout(
-        startPolling,
-        data.pollingIntervalMillis || 5000
-    );
+    if(!isPaused){
+        const waitMs = Math.max(data.pollingIntervalMillis || 5000, POLLING_INTERVAL_MS);
+        document.querySelector("#status").textContent = `チャット取得中（${waitMs / 1000}秒間隔）`;
+        pollingTimer = setTimeout(startPolling, waitMs);
+    }
 } catch(err) {
     console.error(err);
-    pollingTimer = setTimeout(startPolling, 5000);
+    if(!isPaused){
+        pollingTimer = setTimeout(startPolling, POLLING_INTERVAL_MS);
+    }
 }
 }
 
